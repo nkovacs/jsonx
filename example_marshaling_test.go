@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package json_test
+package jsonx_test
 
 import (
 	"fmt"
 	"log"
 	"strings"
 
-	"github.com/nkovacs/json"
+	"github.com/nkovacs/jsonx"
 )
 
 type Animal int
@@ -22,7 +22,7 @@ const (
 
 func (a *Animal) UnmarshalJSON(b []byte) error {
 	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
+	if err := jsonx.Unmarshal(b, &s); err != nil {
 		return err
 	}
 	switch strings.ToLower(s) {
@@ -48,13 +48,13 @@ func (a Animal) MarshalJSON() ([]byte, error) {
 		s = "zebra"
 	}
 
-	return json.Marshal(s)
+	return jsonx.Marshal(s)
 }
 
 func Example_customMarshalJSON() {
 	blob := `["gopher","armadillo","zebra","unknown","gopher","bee","gopher","zebra"]`
 	var zoo []Animal
-	if err := json.Unmarshal([]byte(blob), &zoo); err != nil {
+	if err := jsonx.Unmarshal([]byte(blob), &zoo); err != nil {
 		log.Fatal(err)
 	}
 

@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package json
+package jsonx
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"io/ioutil"
 	"log"
@@ -203,7 +204,7 @@ func nlines(s string, n int) string {
 func TestRawMessage(t *testing.T) {
 	var data struct {
 		X  float64
-		Id RawMessage
+		Id json.RawMessage
 		Y  float32
 	}
 	const raw = `["\u0056",null]`
@@ -227,8 +228,8 @@ func TestRawMessage(t *testing.T) {
 func TestNullRawMessage(t *testing.T) {
 	var data struct {
 		X     float64
-		Id    RawMessage
-		IdPtr *RawMessage
+		Id    json.RawMessage
+		IdPtr *json.RawMessage
 		Y     float32
 	}
 	const msg = `{"X":0.1,"Id":null,"IdPtr":null,"Y":0.2}`
@@ -300,66 +301,66 @@ var tokenStreamCases = []tokenStreamCase{
 	// streaming token cases
 	{json: `10`, expTokens: []interface{}{float64(10)}},
 	{json: ` [10] `, expTokens: []interface{}{
-		Delim('['), float64(10), Delim(']')}},
+		json.Delim('['), float64(10), json.Delim(']')}},
 	{json: ` [false,10,"b"] `, expTokens: []interface{}{
-		Delim('['), false, float64(10), "b", Delim(']')}},
+		json.Delim('['), false, float64(10), "b", json.Delim(']')}},
 	{json: `{ "a": 1 }`, expTokens: []interface{}{
-		Delim('{'), "a", float64(1), Delim('}')}},
+		json.Delim('{'), "a", float64(1), json.Delim('}')}},
 	{json: `{"a": 1, "b":"3"}`, expTokens: []interface{}{
-		Delim('{'), "a", float64(1), "b", "3", Delim('}')}},
+		json.Delim('{'), "a", float64(1), "b", "3", json.Delim('}')}},
 	{json: ` [{"a": 1},{"a": 2}] `, expTokens: []interface{}{
-		Delim('['),
-		Delim('{'), "a", float64(1), Delim('}'),
-		Delim('{'), "a", float64(2), Delim('}'),
-		Delim(']')}},
+		json.Delim('['),
+		json.Delim('{'), "a", float64(1), json.Delim('}'),
+		json.Delim('{'), "a", float64(2), json.Delim('}'),
+		json.Delim(']')}},
 	{json: `{"obj": {"a": 1}}`, expTokens: []interface{}{
-		Delim('{'), "obj", Delim('{'), "a", float64(1), Delim('}'),
-		Delim('}')}},
+		json.Delim('{'), "obj", json.Delim('{'), "a", float64(1), json.Delim('}'),
+		json.Delim('}')}},
 	{json: `{"obj": [{"a": 1}]}`, expTokens: []interface{}{
-		Delim('{'), "obj", Delim('['),
-		Delim('{'), "a", float64(1), Delim('}'),
-		Delim(']'), Delim('}')}},
+		json.Delim('{'), "obj", json.Delim('['),
+		json.Delim('{'), "a", float64(1), json.Delim('}'),
+		json.Delim(']'), json.Delim('}')}},
 
 	// streaming tokens with intermittent Decode()
 	{json: `{ "a": 1 }`, expTokens: []interface{}{
-		Delim('{'), "a",
+		json.Delim('{'), "a",
 		decodeThis{float64(1)},
-		Delim('}')}},
+		json.Delim('}')}},
 	{json: ` [ { "a" : 1 } ] `, expTokens: []interface{}{
-		Delim('['),
+		json.Delim('['),
 		decodeThis{map[string]interface{}{"a": float64(1)}},
-		Delim(']')}},
+		json.Delim(']')}},
 	{json: ` [{"a": 1},{"a": 2}] `, expTokens: []interface{}{
-		Delim('['),
+		json.Delim('['),
 		decodeThis{map[string]interface{}{"a": float64(1)}},
 		decodeThis{map[string]interface{}{"a": float64(2)}},
-		Delim(']')}},
+		json.Delim(']')}},
 	{json: `{ "obj" : [ { "a" : 1 } ] }`, expTokens: []interface{}{
-		Delim('{'), "obj", Delim('['),
+		json.Delim('{'), "obj", json.Delim('['),
 		decodeThis{map[string]interface{}{"a": float64(1)}},
-		Delim(']'), Delim('}')}},
+		json.Delim(']'), json.Delim('}')}},
 
 	{json: `{"obj": {"a": 1}}`, expTokens: []interface{}{
-		Delim('{'), "obj",
+		json.Delim('{'), "obj",
 		decodeThis{map[string]interface{}{"a": float64(1)}},
-		Delim('}')}},
+		json.Delim('}')}},
 	{json: `{"obj": [{"a": 1}]}`, expTokens: []interface{}{
-		Delim('{'), "obj",
+		json.Delim('{'), "obj",
 		decodeThis{[]interface{}{
 			map[string]interface{}{"a": float64(1)},
 		}},
-		Delim('}')}},
+		json.Delim('}')}},
 	{json: ` [{"a": 1} {"a": 2}] `, expTokens: []interface{}{
-		Delim('['),
+		json.Delim('['),
 		decodeThis{map[string]interface{}{"a": float64(1)}},
 		decodeThis{&SyntaxError{"expected comma after array element", 11}},
 	}},
 	{json: `{ "` + strings.Repeat("a", 513) + `" 1 }`, expTokens: []interface{}{
-		Delim('{'), strings.Repeat("a", 513),
+		json.Delim('{'), strings.Repeat("a", 513),
 		decodeThis{&SyntaxError{"expected colon after object key", 518}},
 	}},
 	{json: `{ "\a" }`, expTokens: []interface{}{
-		Delim('{'),
+		json.Delim('{'),
 		&SyntaxError{"invalid character 'a' in string escape code", 3},
 	}},
 	{json: ` \a`, expTokens: []interface{}{

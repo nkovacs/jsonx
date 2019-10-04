@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package json
+package jsonx
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -143,7 +144,7 @@ var unsupportedValues = []interface{}{
 func TestUnsupportedValues(t *testing.T) {
 	for _, v := range unsupportedValues {
 		if _, err := Marshal(v); err != nil {
-			if _, ok := err.(*UnsupportedValueError); !ok {
+			if _, ok := err.(*json.UnsupportedValueError); !ok {
 				t.Errorf("for %v, got %T want UnsupportedValueError", v, err)
 			}
 		} else {
@@ -477,8 +478,8 @@ func TestNilMarshal(t *testing.T) {
 		{v: map[string]string(nil), want: `null`},
 		{v: []byte(nil), want: `null`},
 		{v: struct{ M string }{"gopher"}, want: `{"M":"gopher"}`},
-		{v: struct{ M Marshaler }{}, want: `{"M":null}`},
-		{v: struct{ M Marshaler }{(*nilMarshaler)(nil)}, want: `{"M":"0zenil0"}`},
+		{v: struct{ M json.Marshaler }{}, want: `{"M":null}`},
+		{v: struct{ M json.Marshaler }{(*nilMarshaler)(nil)}, want: `{"M":"0zenil0"}`},
 		{v: struct{ M interface{} }{(*nilMarshaler)(nil)}, want: `{"M":null}`},
 	}
 
@@ -622,23 +623,13 @@ func TestStringBytes(t *testing.T) {
 
 func TestIssue10281(t *testing.T) {
 	type Foo struct {
-		N Number
+		N json.Number
 	}
-	x := Foo{Number(`invalid`)}
+	x := Foo{json.Number(`invalid`)}
 
 	b, err := Marshal(&x)
 	if err == nil {
 		t.Errorf("Marshal(&x) = %#q; want error", b)
-	}
-}
-
-func TestHTMLEscape(t *testing.T) {
-	var b, want bytes.Buffer
-	m := `{"M":"<html>foo &` + "\xe2\x80\xa8 \xe2\x80\xa9" + `</html>"}`
-	want.Write([]byte(`{"M":"\u003chtml\u003efoo \u0026\u2028 \u2029\u003c/html\u003e"}`))
-	HTMLEscape(&b, []byte(m))
-	if !bytes.Equal(b.Bytes(), want.Bytes()) {
-		t.Errorf("HTMLEscape(&b, []byte(m)) = %s; want %s", b.Bytes(), want.Bytes())
 	}
 }
 
@@ -897,17 +888,17 @@ func TestMarshalFloat(t *testing.T) {
 func TestMarshalRawMessageValue(t *testing.T) {
 	type (
 		T1 struct {
-			M RawMessage `json:",omitempty"`
+			M json.RawMessage `json:",omitempty"`
 		}
 		T2 struct {
-			M *RawMessage `json:",omitempty"`
+			M *json.RawMessage `json:",omitempty"`
 		}
 	)
 
 	var (
-		rawNil   = RawMessage(nil)
-		rawEmpty = RawMessage([]byte{})
-		rawText  = RawMessage([]byte(`"foo"`))
+		rawNil   = json.RawMessage(nil)
+		rawEmpty = json.RawMessage([]byte{})
+		rawText  = json.RawMessage([]byte(`"foo"`))
 	)
 
 	tests := []struct {
@@ -922,10 +913,10 @@ func TestMarshalRawMessageValue(t *testing.T) {
 		{&[]interface{}{rawNil}, "[null]", true},
 		{[]interface{}{&rawNil}, "[null]", true},
 		{&[]interface{}{&rawNil}, "[null]", true},
-		{struct{ M RawMessage }{rawNil}, `{"M":null}`, true},
-		{&struct{ M RawMessage }{rawNil}, `{"M":null}`, true},
-		{struct{ M *RawMessage }{&rawNil}, `{"M":null}`, true},
-		{&struct{ M *RawMessage }{&rawNil}, `{"M":null}`, true},
+		{struct{ M json.RawMessage }{rawNil}, `{"M":null}`, true},
+		{&struct{ M json.RawMessage }{rawNil}, `{"M":null}`, true},
+		{struct{ M *json.RawMessage }{&rawNil}, `{"M":null}`, true},
+		{&struct{ M *json.RawMessage }{&rawNil}, `{"M":null}`, true},
 		{map[string]interface{}{"M": rawNil}, `{"M":null}`, true},
 		{&map[string]interface{}{"M": rawNil}, `{"M":null}`, true},
 		{map[string]interface{}{"M": &rawNil}, `{"M":null}`, true},
@@ -942,10 +933,10 @@ func TestMarshalRawMessageValue(t *testing.T) {
 		{&[]interface{}{rawEmpty}, "", false},
 		{[]interface{}{&rawEmpty}, "", false},
 		{&[]interface{}{&rawEmpty}, "", false},
-		{struct{ X RawMessage }{rawEmpty}, "", false},
-		{&struct{ X RawMessage }{rawEmpty}, "", false},
-		{struct{ X *RawMessage }{&rawEmpty}, "", false},
-		{&struct{ X *RawMessage }{&rawEmpty}, "", false},
+		{struct{ X json.RawMessage }{rawEmpty}, "", false},
+		{&struct{ X json.RawMessage }{rawEmpty}, "", false},
+		{struct{ X *json.RawMessage }{&rawEmpty}, "", false},
+		{&struct{ X *json.RawMessage }{&rawEmpty}, "", false},
 		{map[string]interface{}{"nil": rawEmpty}, "", false},
 		{&map[string]interface{}{"nil": rawEmpty}, "", false},
 		{map[string]interface{}{"nil": &rawEmpty}, "", false},
@@ -966,10 +957,10 @@ func TestMarshalRawMessageValue(t *testing.T) {
 		{&[]interface{}{rawText}, `["foo"]`, true}, // Issue6458
 		{[]interface{}{&rawText}, `["foo"]`, true},
 		{&[]interface{}{&rawText}, `["foo"]`, true},
-		{struct{ M RawMessage }{rawText}, `{"M":"foo"}`, true}, // Issue6458
-		{&struct{ M RawMessage }{rawText}, `{"M":"foo"}`, true},
-		{struct{ M *RawMessage }{&rawText}, `{"M":"foo"}`, true},
-		{&struct{ M *RawMessage }{&rawText}, `{"M":"foo"}`, true},
+		{struct{ M json.RawMessage }{rawText}, `{"M":"foo"}`, true}, // Issue6458
+		{&struct{ M json.RawMessage }{rawText}, `{"M":"foo"}`, true},
+		{struct{ M *json.RawMessage }{&rawText}, `{"M":"foo"}`, true},
+		{&struct{ M *json.RawMessage }{&rawText}, `{"M":"foo"}`, true},
 		{map[string]interface{}{"M": rawText}, `{"M":"foo"}`, true},  // Issue6458
 		{&map[string]interface{}{"M": rawText}, `{"M":"foo"}`, true}, // Issue6458
 		{map[string]interface{}{"M": &rawText}, `{"M":"foo"}`, true},

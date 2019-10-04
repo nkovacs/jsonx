@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package json_test
+package jsonx_test
 
 import (
 	"fmt"
 	"log"
 	"strings"
 
-	"github.com/nkovacs/json"
+	"github.com/nkovacs/jsonx"
 )
 
 type Size int
@@ -48,7 +48,7 @@ func (s Size) MarshalText() ([]byte, error) {
 func Example_textMarshalJSON() {
 	blob := `["small","regular","large","unrecognized","small","normal","small","large"]`
 	var inventory []Size
-	if err := json.Unmarshal([]byte(blob), &inventory); err != nil {
+	if err := jsonx.Unmarshal([]byte(blob), &inventory); err != nil {
 		log.Fatal(err)
 	}
 

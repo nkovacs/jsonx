@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package json
+package jsonx
 
 import (
 	"bytes"
-	"errors"
+	"encoding/json"
 	"io"
 )
 
@@ -24,12 +24,22 @@ type Decoder struct {
 	tokenStack []int
 }
 
+// NewDecoder returns a new decoder that reads from r
+// using the default JSON encoder/decoder.
+func NewDecoder(r io.Reader) *Decoder {
+	return defaultJSON.NewDecoder(r)
+}
+
 // NewDecoder returns a new decoder that reads from r.
 //
 // The decoder introduces its own buffering and may
 // read data from r beyond the JSON values requested.
-func NewDecoder(r io.Reader) *Decoder {
-	return &Decoder{r: r}
+func (c *JSON) NewDecoder(r io.Reader) *Decoder {
+	dec := &Decoder{r: r}
+	dec.d.converter = c
+	dec.d.useNumber = c.useNumber
+	dec.d.disallowUnknownFields = c.disallowUnknownFields
+	return dec
 }
 
 // UseNumber causes the Decoder to unmarshal a number into an interface{} as a
@@ -178,15 +188,22 @@ type Encoder struct {
 	w          io.Writer
 	err        error
 	escapeHTML bool
+	converter  *JSON
 
 	indentBuf    *bytes.Buffer
 	indentPrefix string
 	indentValue  string
 }
 
-// NewEncoder returns a new encoder that writes to w.
+// NewEncoder returns a new encoder that writes to w
+// using the default JSON encoder/decoder.
 func NewEncoder(w io.Writer) *Encoder {
-	return &Encoder{w: w, escapeHTML: true}
+	return defaultJSON.NewEncoder(w)
+}
+
+// NewEncoder returns a new encoder that writes to w.
+func (c *JSON) NewEncoder(w io.Writer) *Encoder {
+	return &Encoder{w: w, escapeHTML: !c.dontEscapeHTML, converter: c}
 }
 
 // Encode writes the JSON encoding of v to the stream,
@@ -199,7 +216,7 @@ func (enc *Encoder) Encode(v interface{}) error {
 		return enc.err
 	}
 	e := newEncodeState()
-	err := e.marshal(v, encOpts{escapeHTML: enc.escapeHTML})
+	err := enc.converter.marshal(e, v, encOpts{escapeHTML: enc.escapeHTML})
 	if err != nil {
 		return err
 	}
@@ -218,7 +235,7 @@ func (enc *Encoder) Encode(v interface{}) error {
 			enc.indentBuf = new(bytes.Buffer)
 		}
 		enc.indentBuf.Reset()
-		err = Indent(enc.indentBuf, b, enc.indentPrefix, enc.indentValue)
+		err = json.Indent(enc.indentBuf, b, enc.indentPrefix, enc.indentValue)
 		if err != nil {
 			return err
 		}
@@ -250,31 +267,6 @@ func (enc *Encoder) SetEscapeHTML(on bool) {
 	enc.escapeHTML = on
 }
 
-// RawMessage is a raw encoded JSON value.
-// It implements Marshaler and Unmarshaler and can
-// be used to delay JSON decoding or precompute a JSON encoding.
-type RawMessage []byte
-
-// MarshalJSON returns m as the JSON encoding of m.
-func (m RawMessage) MarshalJSON() ([]byte, error) {
-	if m == nil {
-		return []byte("null"), nil
-	}
-	return m, nil
-}
-
-// UnmarshalJSON sets *m to a copy of data.
-func (m *RawMessage) UnmarshalJSON(data []byte) error {
-	if m == nil {
-		return errors.New("json.RawMessage: UnmarshalJSON on nil pointer")
-	}
-	*m = append((*m)[0:0], data...)
-	return nil
-}
-
-var _ Marshaler = (*RawMessage)(nil)
-var _ Unmarshaler = (*RawMessage)(nil)
-
 // A Token holds a value of one of these types:
 //
 //	Delim, for the four JSON delimiters [ ] { }
@@ -284,7 +276,7 @@ var _ Unmarshaler = (*RawMessage)(nil)
 //	string, for JSON string literals
 //	nil, for JSON null
 //
-type Token interface{}
+// type Token interface{}
 
 const (
 	tokenTopValue = iota
@@ -345,13 +337,6 @@ func (dec *Decoder) tokenValueEnd() {
 	}
 }
 
-// A Delim is a JSON array or object delimiter, one of [ ] { or }.
-type Delim rune
-
-func (d Delim) String() string {
-	return string(d)
-}
-
 // Token returns the next JSON token in the input stream.
 // At the end of the input stream, Token returns nil, io.EOF.
 //
@@ -363,7 +348,7 @@ func (d Delim) String() string {
 // number, and null—along with delimiters [ ] { } of type Delim
 // to mark the start and end of arrays and objects.
 // Commas and colons are elided.
-func (dec *Decoder) Token() (Token, error) {
+func (dec *Decoder) Token() (json.Token, error) {
 	for {
 		c, err := dec.peek()
 		if err != nil {
@@ -377,7 +362,7 @@ func (dec *Decoder) Token() (Token, error) {
 			dec.scanp++
 			dec.tokenStack = append(dec.tokenStack, dec.tokenState)
 			dec.tokenState = tokenArrayStart
-			return Delim('['), nil
+			return json.Delim('['), nil
 
 		case ']':
 			if dec.tokenState != tokenArrayStart && dec.tokenState != tokenArrayComma {
@@ -387,7 +372,7 @@ func (dec *Decoder) Token() (Token, error) {
 			dec.tokenState = dec.tokenStack[len(dec.tokenStack)-1]
 			dec.tokenStack = dec.tokenStack[:len(dec.tokenStack)-1]
 			dec.tokenValueEnd()
-			return Delim(']'), nil
+			return json.Delim(']'), nil
 
 		case '{':
 			if !dec.tokenValueAllowed() {
@@ -396,7 +381,7 @@ func (dec *Decoder) Token() (Token, error) {
 			dec.scanp++
 			dec.tokenStack = append(dec.tokenStack, dec.tokenState)
 			dec.tokenState = tokenObjectStart
-			return Delim('{'), nil
+			return json.Delim('{'), nil
 
 		case '}':
 			if dec.tokenState != tokenObjectStart && dec.tokenState != tokenObjectComma {
@@ -406,7 +391,7 @@ func (dec *Decoder) Token() (Token, error) {
 			dec.tokenState = dec.tokenStack[len(dec.tokenStack)-1]
 			dec.tokenStack = dec.tokenStack[:len(dec.tokenStack)-1]
 			dec.tokenValueEnd()
-			return Delim('}'), nil
+			return json.Delim('}'), nil
 
 		case ':':
 			if dec.tokenState != tokenObjectColon {
@@ -457,7 +442,7 @@ func (dec *Decoder) Token() (Token, error) {
 	}
 }
 
-func (dec *Decoder) tokenError(c byte) (Token, error) {
+func (dec *Decoder) tokenError(c byte) (json.Token, error) {
 	var context string
 	switch dec.tokenState {
 	case tokenTopValue:

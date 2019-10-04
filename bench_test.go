@@ -8,11 +8,12 @@
 // We benchmark converting between the JSON form
 // and in-memory data structures.
 
-package json
+package jsonx
 
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -326,7 +327,7 @@ func BenchmarkTypeFieldsCache(b *testing.B) {
 
 	// clearClear clears the cache. Other JSON operations, must not be running.
 	clearCache := func() {
-		fieldCache = sync.Map{}
+		defaultJSON.fieldCache = &sync.Map{}
 	}
 
 	// MissTypes tests the performance of repeated cache misses.
@@ -342,7 +343,7 @@ func BenchmarkTypeFieldsCache(b *testing.B) {
 					wg.Add(1)
 					go func(j int) {
 						for _, t := range ts[(j*len(ts))/nc : ((j+1)*len(ts))/nc] {
-							cachedTypeFields(t)
+							defaultJSON.cachedTypeFields(t)
 						}
 						wg.Done()
 					}(j)
@@ -358,14 +359,86 @@ func BenchmarkTypeFieldsCache(b *testing.B) {
 		// Pre-warm a cache of size nt.
 		clearCache()
 		for _, t := range types[:nt] {
-			cachedTypeFields(t)
+			defaultJSON.cachedTypeFields(t)
 		}
 		b.Run(fmt.Sprintf("HitTypes%d", nt), func(b *testing.B) {
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
-					cachedTypeFields(types[0])
+					defaultJSON.cachedTypeFields(types[0])
 				}
 			})
 		})
+	}
+}
+
+type BJSON struct {
+	Foo int
+	Bar string
+	Baz float64
+}
+
+func BenchmarkCompareMarshall(b *testing.B) {
+	j := BJSON{
+		Foo: 123,
+		Bar: `benchmark`,
+		Baz: 123.456,
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, _ = Marshal(&j)
+	}
+}
+
+func BenchmarkCompareUnmarshal(b *testing.B) {
+	bytes :=
+		`{"foo": 1, "bar": "my string", bar: 1.123}`
+
+	str := []byte(bytes)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		j := BJSON{}
+		_ = Unmarshal(str, &j)
+	}
+}
+
+func BenchmarkCompareStdMarshall(b *testing.B) {
+	j := BJSON{
+		Foo: 123,
+		Bar: `benchmark`,
+		Baz: 123.456,
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(&j)
+	}
+}
+
+func BenchmarkCompareStdUnmarshal(b *testing.B) {
+	bytes :=
+		`{"foo": 1, "bar": "my string", bar: 1.123}`
+
+	str := []byte(bytes)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		j := BJSON{}
+		_ = json.Unmarshal(str, &j)
+	}
+}
+
+func BenchmarkCompareMarshallOmitEmpty(b *testing.B) {
+	j := BJSON{
+		Foo: 123,
+		Bar: `benchmark`,
+		Baz: 123.456,
+	}
+	json := New()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, _ = json.OmitEmpty().Marshal(&j)
 	}
 }

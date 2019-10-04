@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package json
+package jsonx
 
 // JSON value parser state machine.
 // Just about at the limit of what is reasonable to write by hand.
@@ -15,8 +15,8 @@ package json
 
 import "strconv"
 
-// Valid reports whether data is a valid JSON encoding.
-func Valid(data []byte) bool {
+// valid reports whether data is a valid JSON encoding.
+func valid(data []byte) bool {
 	return checkValid(data, &scanner{}) == nil
 }
 
