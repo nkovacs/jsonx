@@ -6,6 +6,7 @@ package jsonx
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -72,17 +73,19 @@ func TestOmitEmpty(t *testing.T) {
 }
 
 type StringTag struct {
-	BoolStr    bool    `json:",string"`
-	IntStr     int64   `json:",string"`
-	UintptrStr uintptr `json:",string"`
-	StrStr     string  `json:",string"`
+	BoolStr    bool        `json:",string"`
+	IntStr     int64       `json:",string"`
+	UintptrStr uintptr     `json:",string"`
+	StrStr     string      `json:",string"`
+	NumberStr  json.Number `json:",string"`
 }
 
 var stringTagExpected = `{
  "BoolStr": "true",
  "IntStr": "42",
  "UintptrStr": "44",
- "StrStr": "\"xzbit\""
+ "StrStr": "\"xzbit\"",
+ "NumberStr": "46"
 }`
 
 func TestStringTag(t *testing.T) {
@@ -91,6 +94,7 @@ func TestStringTag(t *testing.T) {
 	s.IntStr = 42
 	s.UintptrStr = 44
 	s.StrStr = "xzbit"
+	s.NumberStr = "46"
 	got, err := MarshalIndent(&s, "", " ")
 	if err != nil {
 		t.Fatal(err)
@@ -454,18 +458,31 @@ type BugX struct {
 	BugB
 }
 
-// Issue 16042. Even if a nil interface value is passed in
-// as long as it implements MarshalJSON, it should be marshaled.
-type nilMarshaler string
+// golang.org/issue/16042.
+// Even if a nil interface value is passed in, as long as
+// it implements Marshaler, it should be marshaled.
+type nilJSONMarshaler string
 
-func (nm *nilMarshaler) MarshalJSON() ([]byte, error) {
+func (nm *nilJSONMarshaler) MarshalJSON() ([]byte, error) {
 	if nm == nil {
 		return Marshal("0zenil0")
 	}
 	return Marshal("zenil:" + string(*nm))
 }
 
-// Issue 16042.
+// golang.org/issue/34235.
+// Even if a nil interface value is passed in, as long as
+// it implements encoding.TextMarshaler, it should be marshaled.
+type nilTextMarshaler string
+
+func (nm *nilTextMarshaler) MarshalText() ([]byte, error) {
+	if nm == nil {
+		return []byte("0zenil0"), nil
+	}
+	return []byte("zenil:" + string(*nm)), nil
+}
+
+// See golang.org/issue/16042 and golang.org/issue/34235.
 func TestNilMarshal(t *testing.T) {
 	testCases := []struct {
 		v    interface{}
@@ -479,8 +496,11 @@ func TestNilMarshal(t *testing.T) {
 		{v: []byte(nil), want: `null`},
 		{v: struct{ M string }{"gopher"}, want: `{"M":"gopher"}`},
 		{v: struct{ M json.Marshaler }{}, want: `{"M":null}`},
-		{v: struct{ M json.Marshaler }{(*nilMarshaler)(nil)}, want: `{"M":"0zenil0"}`},
-		{v: struct{ M interface{} }{(*nilMarshaler)(nil)}, want: `{"M":null}`},
+		{v: struct{ M json.Marshaler }{(*nilJSONMarshaler)(nil)}, want: `{"M":"0zenil0"}`},
+		{v: struct{ M interface{} }{(*nilJSONMarshaler)(nil)}, want: `{"M":null}`},
+		{v: struct{ M encoding.TextMarshaler }{}, want: `{"M":null}`},
+		{v: struct{ M encoding.TextMarshaler }{(*nilTextMarshaler)(nil)}, want: `{"M":"0zenil0"}`},
+		{v: struct{ M interface{} }{(*nilTextMarshaler)(nil)}, want: `{"M":null}`},
 	}
 
 	for _, tt := range testCases {
@@ -778,6 +798,21 @@ func TestTextMarshalerMapKeysAreSorted(t *testing.T) {
 	const want = `{"a:z":3,"x:y":1,"y:x":2,"z:a":4}`
 	if string(b) != want {
 		t.Errorf("Marshal map with text.Marshaler keys: got %#q, want %#q", b, want)
+	}
+}
+
+// https://golang.org/issue/33675
+func TestNilMarshalerTextMapKey(t *testing.T) {
+	b, err := Marshal(map[*unmarshalerText]int{
+		(*unmarshalerText)(nil): 1,
+		{"A", "B"}:              2,
+	})
+	if err != nil {
+		t.Fatalf("Failed to Marshal *text.Marshaler: %v", err)
+	}
+	const want = `{"":1,"A:B":2}`
+	if string(b) != want {
+		t.Errorf("Marshal map with *text.Marshaler keys: got %#q, want %#q", b, want)
 	}
 }
 
