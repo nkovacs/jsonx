@@ -393,6 +393,12 @@ type BJSON struct {
 	Baz float64
 }
 
+type BJSONoe struct {
+	Foo int     `json:",omitempty"`
+	Bar string  `json:",omitempty"`
+	Baz float64 `json:",omitempty"`
+}
+
 func BenchmarkCompareMarshall(b *testing.B) {
 	j := BJSON{
 		Foo: 123,
@@ -445,6 +451,19 @@ func BenchmarkCompareStdUnmarshal(b *testing.B) {
 	}
 }
 
+func BenchmarkCompareStdMarshallOmitEmpty(b *testing.B) {
+	j := BJSONoe{
+		Foo: 123,
+		Bar: `benchmark`,
+		Baz: 123.456,
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(&j)
+	}
+}
+
 func BenchmarkCompareMarshallOmitEmpty(b *testing.B) {
 	j := BJSON{
 		Foo: 123,
@@ -456,5 +475,19 @@ func BenchmarkCompareMarshallOmitEmpty(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		_, _ = json.OmitEmpty().Marshal(&j)
+	}
+}
+
+func BenchmarkCompareMarshallOmitEmptyOnce(b *testing.B) {
+	j := BJSON{
+		Foo: 123,
+		Bar: `benchmark`,
+		Baz: 123.456,
+	}
+	json := New().OmitEmpty()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(&j)
 	}
 }
