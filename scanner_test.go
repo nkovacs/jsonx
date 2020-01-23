@@ -47,6 +47,7 @@ var examples = []example{
 	{`[1,2,3]`, "[\n\t1,\n\t2,\n\t3\n]"},
 	{`{"x":1}`, "{\n\t\"x\": 1\n}"},
 	{ex1, ex1i},
+	{"{\"\":\"<>&\u2028\u2029\"}", "{\n\t\"\": \"<>&\u2028\u2029\"\n}"}, // See golang.org/issue/34070
 }
 
 var ex1 = `[true,false,null,"x",1,1.5,0,-5e+2]`
@@ -66,14 +67,14 @@ func TestCompact(t *testing.T) {
 	var buf bytes.Buffer
 	for _, tt := range examples {
 		buf.Reset()
-		if err := compact(&buf, []byte(tt.compact), true); err != nil {
+		if err := compact(&buf, []byte(tt.compact), false); err != nil {
 			t.Errorf("Compact(%#q): %v", tt.compact, err)
 		} else if s := buf.String(); s != tt.compact {
 			t.Errorf("Compact(%#q) = %#q, want original", tt.compact, s)
 		}
 
 		buf.Reset()
-		if err := compact(&buf, []byte(tt.indent), true); err != nil {
+		if err := compact(&buf, []byte(tt.indent), false); err != nil {
 			t.Errorf("Compact(%#q): %v", tt.indent, err)
 			continue
 		} else if s := buf.String(); s != tt.compact {
@@ -88,12 +89,12 @@ func TestCompactSeparators(t *testing.T) {
 	tests := []struct {
 		in, compact string
 	}{
-		{"{\"\u2028\": 1}", `{"\u2028":1}`},
-		{"{\"\u2029\" :2}", `{"\u2029":2}`},
+		{"{\"\u2028\": 1}", "{\"\u2028\":1}"},
+		{"{\"\u2029\" :2}", "{\"\u2029\":2}"},
 	}
 	for _, tt := range tests {
 		var buf bytes.Buffer
-		if err := compact(&buf, []byte(tt.in), true); err != nil {
+		if err := compact(&buf, []byte(tt.in), false); err != nil {
 			t.Errorf("Compact(%q): %v", tt.in, err)
 		} else if s := buf.String(); s != tt.compact {
 			t.Errorf("Compact(%q) = %q, want %q", tt.in, s, tt.compact)
