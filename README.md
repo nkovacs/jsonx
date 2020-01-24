@@ -82,7 +82,7 @@ fmt.Println(err)
 
 jsonx is not meant as a full replacement to encoding/json. It reuses as much of encoding/json as it can, including types such as `json.Number` and `json.RawMessage`, and does not duplicate `json.Compact`, `json.Indent`, `json.Valid` and `json.HTMLEscape`.
 
-All errors are the same as encoding/json except `json.SyntaxError`, which has an unexported field. jsonx uses `jsonx.SyntaxError` instead.
+All errors are the same as encoding/json except `json.SyntaxError` and `json.MarshalerError`, which had unexported fields. jsonx uses `jsonx.SyntaxError` and `jsonx.MarshalerError` instead.
 
 jsonx respects json struct tags, which can override both the key encoding function and OmitEmpty.
 

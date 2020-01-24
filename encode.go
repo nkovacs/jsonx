@@ -198,6 +198,26 @@ func MarshalIndent(v interface{}, prefix, indent string) ([]byte, error) {
 	return defaultJSON.MarshalIndent(v, prefix, indent)
 }
 
+// A MarshalerError represents an error from calling a MarshalJSON or MarshalText method.
+type MarshalerError struct {
+	Type       reflect.Type
+	Err        error
+	sourceFunc string
+}
+
+func (e *MarshalerError) Error() string {
+	srcFunc := e.sourceFunc
+	if srcFunc == "" {
+		srcFunc = "MarshalJSON"
+	}
+	return "json: error calling " + srcFunc +
+		" for type " + e.Type.String() +
+		": " + e.Err.Error()
+}
+
+// Unwrap returns the underlying error.
+func (e *MarshalerError) Unwrap() error { return e.Err }
+
 var hex = "0123456789abcdef"
 
 // An encodeState encodes JSON into a bytes.Buffer.
@@ -384,7 +404,7 @@ func marshalerEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 		err = compact(&e.Buffer, b, opts.escapeHTML)
 	}
 	if err != nil {
-		e.error(&json.MarshalerError{Type: v.Type(), Err: err})
+		e.error(&MarshalerError{Type: v.Type(), Err: err, sourceFunc: "MarshalJSON"})
 	}
 }
 
@@ -401,7 +421,7 @@ func addrMarshalerEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 		err = compact(&e.Buffer, b, opts.escapeHTML)
 	}
 	if err != nil {
-		e.error(&json.MarshalerError{Type: v.Type(), Err: err})
+		e.error(&MarshalerError{Type: v.Type(), Err: err, sourceFunc: "MarshalJSON"})
 	}
 }
 
@@ -417,7 +437,7 @@ func textMarshalerEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 	}
 	b, err := m.MarshalText()
 	if err != nil {
-		e.error(&json.MarshalerError{Type: v.Type(), Err: err})
+		e.error(&MarshalerError{Type: v.Type(), Err: err, sourceFunc: "MarshalText"})
 	}
 	e.stringBytes(b, opts.escapeHTML)
 }
@@ -431,7 +451,7 @@ func addrTextMarshalerEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 	m := va.Interface().(encoding.TextMarshaler)
 	b, err := m.MarshalText()
 	if err != nil {
-		e.error(&json.MarshalerError{Type: v.Type(), Err: err})
+		e.error(&MarshalerError{Type: v.Type(), Err: err, sourceFunc: "MarshalText"})
 	}
 	e.stringBytes(b, opts.escapeHTML)
 }
@@ -690,7 +710,7 @@ func (me mapEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
 	for i, v := range keys {
 		sv[i].v = v
 		if err := sv[i].resolve(); err != nil {
-			e.error(&json.MarshalerError{Type: v.Type(), Err: err})
+			e.error(fmt.Errorf("json: encoding error for type %q: %q", v.Type().String(), err.Error()))
 		}
 	}
 	sort.Slice(sv, func(i, j int) bool { return sv[i].s < sv[j].s })
