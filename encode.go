@@ -154,7 +154,7 @@ import (
 //
 // JSON cannot represent cyclic data structures and Marshal does not
 // handle them. Passing cyclic structures to Marshal will result in
-// an infinite recursion.
+// an error.
 //
 func (c *JSON) Marshal(v interface{}) ([]byte, error) {
 	e := newEncodeState()
@@ -224,7 +224,17 @@ var hex = "0123456789abcdef"
 type encodeState struct {
 	bytes.Buffer // accumulated output
 	scratch      [64]byte
+
+	// Keep track of what pointers we've seen in the current recursive call
+	// path, to avoid cycles that could lead to a stack overflow. Only do
+	// the relatively expensive map operations if ptrLevel is larger than
+	// startDetectingCyclesAfter, so that we skip the work if we're within a
+	// reasonable amount of nested pointers deep.
+	ptrLevel uint
+	ptrSeen  map[interface{}]struct{}
 }
+
+const startDetectingCyclesAfter = 1000
 
 var encodeStatePool sync.Pool
 
@@ -232,9 +242,13 @@ func newEncodeState() *encodeState {
 	if v := encodeStatePool.Get(); v != nil {
 		e := v.(*encodeState)
 		e.Reset()
+		if len(e.ptrSeen) > 0 {
+			panic("ptrEncoder.encode should have emptied ptrSeen via defers")
+		}
+		e.ptrLevel = 0
 		return e
 	}
-	return new(encodeState)
+	return &encodeState{ptrSeen: make(map[interface{}]struct{})}
 }
 
 // jsonError is an error wrapper type for internal use only.
@@ -340,18 +354,21 @@ var (
 // newTypeEncoder constructs an encoderFunc for a type.
 // The returned encoder only checks CanAddr when allowAddr is true.
 func (c *JSON) newTypeEncoder(t reflect.Type, allowAddr bool) encoderFunc {
-	if t.Implements(marshalerType) {
-		return marshalerEncoder
-	}
+	// If we have a non-pointer value whose type implements
+	// Marshaler with a value receiver, then we're better off taking
+	// the address of the value - otherwise we end up with an
+	// allocation as we cast the value to an interface.
 	if t.Kind() != reflect.Ptr && allowAddr && reflect.PtrTo(t).Implements(marshalerType) {
 		return newCondAddrEncoder(addrMarshalerEncoder, c.newTypeEncoder(t, false))
 	}
-
-	if t.Implements(textMarshalerType) {
-		return textMarshalerEncoder
+	if t.Implements(marshalerType) {
+		return marshalerEncoder
 	}
 	if t.Kind() != reflect.Ptr && allowAddr && reflect.PtrTo(t).Implements(textMarshalerType) {
 		return newCondAddrEncoder(addrTextMarshalerEncoder, c.newTypeEncoder(t, false))
+	}
+	if t.Implements(textMarshalerType) {
+		return textMarshalerEncoder
 	}
 
 	switch t.Kind() {
@@ -825,7 +842,18 @@ func (pe ptrEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
 		e.WriteString("null")
 		return
 	}
+	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
+		// We're a large number of nested ptrEncoder.encode calls deep;
+		// start checking if we've run into a pointer cycle.
+		ptr := v.Interface()
+		if _, ok := e.ptrSeen[ptr]; ok {
+			e.error(&json.UnsupportedValueError{Value: v, Str: fmt.Sprintf("encountered a cycle via %s", v.Type())})
+		}
+		e.ptrSeen[ptr] = struct{}{}
+		defer delete(e.ptrSeen, ptr)
+	}
 	pe.elemEnc(e, v.Elem(), opts)
+	e.ptrLevel--
 }
 
 func (c *JSON) newPtrEncoder(t reflect.Type) encoderFunc {

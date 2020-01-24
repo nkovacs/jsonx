@@ -4,12 +4,14 @@
 
 package jsonx
 
-import "bytes"
+import (
+	"bytes"
+)
 
 func compact(dst *bytes.Buffer, src []byte, escape bool) error {
 	origLen := dst.Len()
-	var scan scanner
-	scan.reset()
+	scan := newScanner()
+	defer freeScanner(scan)
 	start := 0
 	for i, c := range src {
 		if escape && (c == '<' || c == '>' || c == '&') {
@@ -30,7 +32,7 @@ func compact(dst *bytes.Buffer, src []byte, escape bool) error {
 			dst.WriteByte(hex[src[i+2]&0xF])
 			start = i + 3
 		}
-		v := scan.step(&scan, c)
+		v := scan.step(scan, c)
 		if v >= scanSkipSpace {
 			if v == scanError {
 				break
